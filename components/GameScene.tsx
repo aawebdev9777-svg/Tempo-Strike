@@ -6,10 +6,10 @@
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Environment, Grid, PerspectiveCamera, Stars } from '@react-three/drei';
+import { Environment, Grid, PerspectiveCamera, Stars, Float, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
-import { GameStatus, NoteData, HandPositions, COLORS, CutDirection, ShopItem } from '../types';
-import { PLAYER_Z, SPAWN_Z, MISS_Z, NOTE_SPEED, DIRECTION_VECTORS, LANE_X_POSITIONS, LAYER_Y_POSITIONS, SONG_BPM } from '../constants';
+import { GameStatus, NoteData, HandPositions, COLORS, CutDirection, ShopItem, ScoreTier, HandType } from '../types';
+import { PLAYER_Z, SPAWN_Z, MISS_Z, DIRECTION_VECTORS, LANE_X_POSITIONS, LAYER_Y_POSITIONS, SONG_BPM } from '../constants';
 import Note from './Note';
 import Saber from './Saber';
 import ScoreFloater from './ScoreFloater';
@@ -19,7 +19,8 @@ interface GameSceneProps {
   audioRef: React.RefObject<HTMLAudioElement>;
   handPositionsRef: React.MutableRefObject<any>;
   chart: NoteData[];
-  onNoteHit: (note: NoteData, goodCut: boolean) => void;
+  noteSpeed: number;
+  onNoteHit: (note: NoteData, tier: ScoreTier) => void;
   onNoteMiss: (note: NoteData) => void;
   onSongEnd: () => void;
   equippedSaber: ShopItem;
@@ -35,54 +36,137 @@ interface PopupData {
     color: string;
 }
 
-// --- CYBER TUNNEL COMPONENT ---
-const CyberTunnel: React.FC<{ speed: number, color: THREE.Color }> = ({ speed, color }) => {
-    const count = 15;
+// --- WORLD COMPONENTS ---
+
+const Mountains: React.FC<{ color: THREE.Color }> = ({ color }) => {
+    const mountains = useMemo(() => {
+        const m = [];
+        // Side Mountains (Close)
+        for (let i = 0; i < 15; i++) {
+             const isLeft = i % 2 === 0;
+             const xBase = isLeft ? -50 : 50;
+             const zBase = -30 - (i * 5);
+             
+             m.push({
+                 pos: [xBase + (Math.random() - 0.5) * 30, -10, zBase + (Math.random() - 0.5) * 20] as [number, number, number],
+                 scale: [15 + Math.random() * 10, 25 + Math.random() * 20, 15 + Math.random() * 10] as [number, number, number],
+                 rot: [0, Math.random() * Math.PI, 0] as [number, number, number]
+             });
+        }
+        
+        // Distant Horizon Mountains
+        for (let i = 0; i < 30; i++) {
+            const x = (Math.random() - 0.5) * 300;
+            const z = -100 - Math.random() * 60;
+            m.push({
+                pos: [x, -15, z] as [number, number, number],
+                scale: [30 + Math.random() * 30, 40 + Math.random() * 40, 30 + Math.random() * 30] as [number, number, number],
+                rot: [0, Math.random() * Math.PI, 0] as [number, number, number]
+            });
+        }
+        return m;
+    }, []);
+
+    return (
+        <group>
+            {mountains.map((m, i) => (
+                <mesh key={i} position={m.pos} rotation={m.rot} scale={m.scale}>
+                    <coneGeometry args={[1, 1, 4]} />
+                    <meshStandardMaterial 
+                        color="#050510" 
+                        roughness={0.9} 
+                        metalness={0.2} 
+                        flatShading 
+                    />
+                </mesh>
+            ))}
+            {/* Fog to blend mountains into distance */}
+            <fog attach="fog" args={['#000000', 30, 150]} />
+        </group>
+    );
+};
+
+const HexTunnel: React.FC<{ speed: number, color: THREE.Color, intensity: number }> = ({ speed, color, intensity }) => {
+    const count = 12;
     const meshRef = useRef<THREE.InstancedMesh>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
 
     useFrame((state) => {
         if (!meshRef.current) return;
         
-        const t = state.clock.elapsedTime * speed;
+        const t = state.clock.elapsedTime * (speed * 0.5); // Slower, more majestic rotation
 
         for (let i = 0; i < count; i++) {
-            // Distribute rings along Z
-            const zOffset = (i * 10) % 150; 
-            // Move them towards player (positive Z direction usually, but here we move world past player)
-            let z = (t * 20 + zOffset) % 150; 
-            z = z - 120; // Shift range to be in front and behind
+            const zOffset = (i * 12) % 120; 
+            let z = (t * 20 + zOffset) % 120; 
+            z = z - 100;
 
             dummy.position.set(0, 0, z);
-            dummy.scale.set(1, 1, 1);
-            dummy.rotation.set(0, 0, i * 0.5 + t * 0.2); // Rotate rings
+            // Rotate the hexagons as they move
+            dummy.rotation.set(0, 0, i * 0.2 + t * 0.1); 
+            
+            // Pulse scale to the beat
+            const beatScale = 1 + (intensity * 0.05);
+            dummy.scale.set(beatScale, beatScale, 1);
+            
             dummy.updateMatrix();
             meshRef.current.setMatrixAt(i, dummy.matrix);
-            
-            // Fade out as they get close/behind
-            const dist = Math.abs(z - PLAYER_Z);
-            const scale = Math.max(0, Math.min(1, (dist - 5) / 50)); 
-            // We can't easily change opacity per instance without custom shader, 
-            // so we scale them down to 0 when they get too close/far
         }
         meshRef.current.instanceMatrix.needsUpdate = true;
         (meshRef.current.material as THREE.MeshStandardMaterial).color = color;
         (meshRef.current.material as THREE.MeshStandardMaterial).emissive = color;
+        (meshRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.5 + intensity;
     });
 
     return (
         <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-            <torusGeometry args={[8, 0.2, 8, 32]} />
-            <meshStandardMaterial transparent opacity={0.3} toneMapped={false} emissiveIntensity={2} />
+            <cylinderGeometry args={[12, 12, 1, 6, 1, true]} />
+            <meshStandardMaterial 
+                transparent 
+                opacity={0.1} 
+                toneMapped={false} 
+                side={THREE.DoubleSide} 
+                wireframe 
+            />
         </instancedMesh>
     );
 };
+
+const MovingFloor: React.FC<{ speed: number }> = ({ speed }) => {
+    const gridRef = useRef<THREE.Group>(null);
+    
+    useFrame((state, delta) => {
+        if (gridRef.current) {
+            // Move grid towards camera to simulate speed
+            gridRef.current.position.z += speed * delta;
+            // Reset position to create infinite loop
+            if (gridRef.current.position.z > 10) {
+                gridRef.current.position.z = 0;
+            }
+        }
+    });
+
+    return (
+        <group ref={gridRef} position={[0, -2, -20]}>
+             <Grid 
+                args={[40, 100]} 
+                cellThickness={0.2} 
+                cellColor="#222" 
+                sectionSize={5} 
+                sectionThickness={1} 
+                sectionColor="#0044aa" 
+                fadeDistance={60} 
+            />
+        </group>
+    );
+}
 
 const GameScene: React.FC<GameSceneProps> = ({ 
     gameStatus, 
     audioRef, 
     handPositionsRef, 
     chart,
+    noteSpeed,
     onNoteHit,
     onNoteMiss,
     onSongEnd,
@@ -92,7 +176,6 @@ const GameScene: React.FC<GameSceneProps> = ({
   const [notesState, setNotesState] = useState<NoteData[]>(chart);
   const [currentTime, setCurrentTime] = useState(0);
   
-  // Floating Text System
   const [popups, setPopups] = useState<PopupData[]>([]);
   const popupIdCounter = useRef(0);
 
@@ -101,11 +184,11 @@ const GameScene: React.FC<GameSceneProps> = ({
   const shakeIntensity = useRef(0);
   const cameraRef = useRef<THREE.PerspectiveCamera>(null);
   
-  // Environment Refs
-  const ambientLightRef = useRef<THREE.AmbientLight>(null);
-  const spotLightRef = useRef<THREE.SpotLight>(null);
-  const fogRef = useRef<THREE.Fog>(null);
-  const tunnelColor = useRef(new THREE.Color("#3b82f6"));
+  // Audio Reactive Refs
+  const audioPulse = useRef(0);
+  // We pass this ref to children so they can react to audio without re-rendering props
+  const intensityRef = useRef(0); 
+  const worldColor = useRef(new THREE.Color("#001133"));
 
   const vecA = useMemo(() => new THREE.Vector3(), []);
   const vecB = useMemo(() => new THREE.Vector3(), []);
@@ -131,50 +214,69 @@ const GameScene: React.FC<GameSceneProps> = ({
       setPopups(prev => prev.filter(p => p.id !== id));
   };
 
-  const handleHit = (note: NoteData, goodCut: boolean) => {
-      shakeIntensity.current = goodCut ? 0.3 : 0.15;
-      onNoteHit(note, goodCut);
+  const handleHit = (note: NoteData, tier: ScoreTier) => {
+      if (tier === ScoreTier.PERFECT) shakeIntensity.current = 0.4;
+      else if (tier === ScoreTier.GOLD_STAR) shakeIntensity.current = 0.5;
+      else if (tier === ScoreTier.GREAT) shakeIntensity.current = 0.25;
+      else if (tier === ScoreTier.WRONG_SABER) shakeIntensity.current = 0.2;
+      else shakeIntensity.current = 0.1;
+
+      onNoteHit(note, tier);
       
-      // Calculate world position for popup
       const x = LANE_X_POSITIONS[note.lineIndex];
       const y = LAYER_Y_POSITIONS[note.lineLayer];
-      // Note is hit roughly at PLAYER_Z (0), maybe slightly offset
       
-      const scoreText = goodCut ? "PERFECT" : "BAD CUT";
-      const color = goodCut ? "#ffffff" : "#ff4444";
+      let text = tier.toString();
+      let color = "#ffffff";
+
+      switch (tier) {
+          case ScoreTier.PERFECT: text = "PERFECT"; color = "#FDB931"; break;
+          case ScoreTier.GREAT: text = "GREAT"; color = "#3b82f6"; break;
+          case ScoreTier.GOOD: text = "GOOD"; color = "#22c55e"; break;
+          case ScoreTier.OK: text = "OK"; color = "#eab308"; break;
+          case ScoreTier.BAD: text = "SLOPPY"; color = "#9ca3af"; break;
+          case ScoreTier.WRONG_SABER: text = "WRONG SABER"; color = "#ff4444"; break;
+          case ScoreTier.GOLD_STAR: text = "JACKPOT!"; color = "#FFD700"; break;
+      }
       
-      addPopup(new THREE.Vector3(x, y + 0.5, -2), scoreText, color);
+      addPopup(new THREE.Vector3(x, y + 0.5, -2), text, color);
   };
 
   const handleMiss = (note: NoteData) => {
       onNoteMiss(note);
       const x = LANE_X_POSITIONS[note.lineIndex];
       const y = LAYER_Y_POSITIONS[note.lineLayer];
-      addPopup(new THREE.Vector3(x, y, -1), "MISS", "#ff0000");
+      addPopup(new THREE.Vector3(x, y, -1), "MISS", "#ff4444");
   };
 
   useFrame((state, delta) => {
-    // --- Dynamic Audio Visuals & Environment ---
-    if (audioRef.current && gameStatus === GameStatus.PLAYING) {
-        const time = audioRef.current.currentTime;
+    const time = audioRef.current?.currentTime || 0;
+    
+    // --- Audio Reactive Visuals ---
+    if (audioRef.current && gameStatus === GameStatus.PLAYING && !audioRef.current.paused) {
         const beatPhase = (time % BEAT_TIME) / BEAT_TIME;
-        const pulse = Math.pow(1 - beatPhase, 4); 
-        
-        if (ambientLightRef.current) ambientLightRef.current.intensity = 0.1 + (pulse * 0.3);
-        if (spotLightRef.current) spotLightRef.current.intensity = 0.5 + (pulse * 1.5);
-
-        // Combo Color Shift
-        let targetColor = new THREE.Color("#3b82f6"); 
-        if (combo > 50) targetColor.set("#FFD700"); 
-        else if (combo > 30) targetColor.set("#ec4899"); 
-        else if (combo > 10) targetColor.set("#8b5cf6"); 
-
-        tunnelColor.current.lerp(targetColor, delta);
-        if (spotLightRef.current) spotLightRef.current.color.copy(tunnelColor.current);
-        if (fogRef.current) fogRef.current.color.lerp(targetColor, delta * 0.5);
+        // Sharp pulse at start of beat
+        audioPulse.current = Math.pow(1 - beatPhase, 3); 
+    } else {
+        // Idle breathing
+        audioPulse.current = (Math.sin(state.clock.elapsedTime) * 0.5 + 0.5) * 0.2;
     }
+    
+    // Update shared ref for children
+    intensityRef.current = audioPulse.current;
 
-    // --- Camera Shake ---
+    // Dynamic color shifting based on Combo
+    let targetColor = new THREE.Color("#0033cc"); 
+    if (combo > 50) targetColor.set("#FF8800"); 
+    else if (combo > 30) targetColor.set("#cc00cc"); 
+    else if (combo > 10) targetColor.set("#00ccaa"); 
+    
+    // In IDLE, just blue
+    if (gameStatus !== GameStatus.PLAYING) targetColor.set("#001133");
+
+    worldColor.current.lerp(targetColor, delta * 2);
+
+    // Camera Shake Logic
     if (shakeIntensity.current > 0 && cameraRef.current) {
         const shake = shakeIntensity.current;
         cameraRef.current.position.set(
@@ -183,24 +285,23 @@ const GameScene: React.FC<GameSceneProps> = ({
             4 + (Math.random() - 0.5) * shake
         );
         shakeIntensity.current = THREE.MathUtils.lerp(shakeIntensity.current, 0, 10 * delta);
-        if (shakeIntensity.current < 0.01) {
-             shakeIntensity.current = 0;
-             cameraRef.current.position.set(0, 1.8, 4);
-        }
+    } else if (cameraRef.current) {
+        // Subtle idle sway
+        cameraRef.current.position.x = Math.sin(state.clock.elapsedTime * 0.2) * 0.2;
+        cameraRef.current.position.y = 1.8 + Math.cos(state.clock.elapsedTime * 0.3) * 0.1;
+        cameraRef.current.lookAt(0, 0, -10);
     }
 
     if (gameStatus !== GameStatus.PLAYING || !audioRef.current) return;
-
-    const time = audioRef.current.currentTime;
+    
     setCurrentTime(time);
-
     if (audioRef.current.ended) {
         onSongEnd();
         return;
     }
 
-    // --- Note Spawning ---
-    const spawnAheadTime = Math.abs(SPAWN_Z - PLAYER_Z) / NOTE_SPEED;
+    // --- Note Spawning & Collision (Same Logic) ---
+    const spawnAheadTime = Math.abs(SPAWN_Z - PLAYER_Z) / noteSpeed;
     while (nextNoteIndexRef.current < notesState.length) {
       const nextNote = notesState[nextNoteIndexRef.current];
       if (nextNote.time - spawnAheadTime <= time) {
@@ -211,15 +312,13 @@ const GameScene: React.FC<GameSceneProps> = ({
       }
     }
 
-    // --- Collision Logic ---
     const hands = handPositionsRef.current as HandPositions;
-
     for (let i = activeNotesRef.current.length - 1; i >= 0; i--) {
         const note = activeNotesRef.current[i];
         if (note.hit || note.missed) continue;
 
         const timeDiff = note.time - time; 
-        const currentZ = PLAYER_Z - (timeDiff * NOTE_SPEED);
+        const currentZ = PLAYER_Z - (timeDiff * noteSpeed);
 
         if (currentZ > MISS_Z) {
             note.missed = true;
@@ -228,42 +327,88 @@ const GameScene: React.FC<GameSceneProps> = ({
             continue;
         }
 
-        if (currentZ > PLAYER_Z - 2.5 && currentZ < PLAYER_Z + 1.5) {
-            const handPos = note.type === 'left' ? hands.left : hands.right;
-            const handVel = note.type === 'left' ? hands.leftVelocity : hands.rightVelocity;
+        const zWindow = 2.5 * equippedSaber.perks.hitWindow;
+        if (currentZ > PLAYER_Z - zWindow && currentZ < PLAYER_Z + (zWindow * 0.5)) {
+            const notePos = vecA.set(LANE_X_POSITIONS[note.lineIndex], LAYER_Y_POSITIONS[note.lineLayer], currentZ);
+            const hitRadius = 1.2 * equippedSaber.perks.hitWindow;
 
-            if (handPos) {
-                 const notePos = vecA.set(
-                     LANE_X_POSITIONS[note.lineIndex],
-                     LAYER_Y_POSITIONS[note.lineLayer],
-                     currentZ
-                 );
+            // Check collision with BOTH hands
+            const correctHandType = note.type;
+            const wrongHandType = correctHandType === 'left' ? 'right' : 'left';
 
-                 const distXY = Math.sqrt(Math.pow(handPos.x - notePos.x, 2) + Math.pow(handPos.y - notePos.y, 2));
+            const correctHandPos = correctHandType === 'left' ? hands.left : hands.right;
+            const wrongHandPos = wrongHandType === 'left' ? hands.left : hands.right;
 
-                 const baseRadius = 1.2;
-                 const hitRadius = baseRadius * equippedSaber.perks.hitWindow;
+            let hitCorrect = false;
+            let hitWrong = false;
 
+            // Check Correct Hand First
+            if (correctHandPos) {
+                 const distXY = Math.sqrt(Math.pow(correctHandPos.x - notePos.x, 2) + Math.pow(correctHandPos.y - notePos.y, 2));
                  if (distXY < hitRadius) {
-                     let goodCut = true;
-                     const speed = handVel.length();
-
-                     if (!isUltimate) {
-                         if (note.cutDirection !== CutDirection.ANY) {
-                             const requiredDir = DIRECTION_VECTORS[note.cutDirection];
-                             vecB.copy(handVel).normalize();
-                             const dot = vecB.dot(requiredDir);
-                             if (dot < 0.3 || speed < 1.5) goodCut = false;
-                         } else {
-                             if (speed < 1.5) goodCut = false; 
-                         }
-                     }
-
-                     note.hit = true;
-                     note.hitTime = time;
-                     handleHit(note, goodCut);
-                     activeNotesRef.current.splice(i, 1);
+                     hitCorrect = true;
                  }
+            }
+
+            // Check Wrong Hand (if correct hand didn't hit it yet)
+            // If both hit in the same frame, we prioritize the Correct hit to be generous.
+            if (wrongHandPos && !hitCorrect) {
+                 const distXY = Math.sqrt(Math.pow(wrongHandPos.x - notePos.x, 2) + Math.pow(wrongHandPos.y - notePos.y, 2));
+                 if (distXY < hitRadius) {
+                     hitWrong = true;
+                 }
+            }
+
+            // --- GOLD STAR LOGIC (ANY HAND) ---
+            if (note.isGoldStar) {
+                if (hitCorrect || hitWrong) {
+                    note.hit = true;
+                    note.hitTime = time;
+                    handleHit(note, ScoreTier.GOLD_STAR);
+                    activeNotesRef.current.splice(i, 1);
+                }
+                continue;
+            }
+
+            // --- NORMAL LOGIC ---
+            if (hitCorrect) {
+                 const handVel = correctHandType === 'left' ? hands.leftVelocity : hands.rightVelocity;
+                 const distXY = Math.sqrt(Math.pow(correctHandPos!.x - notePos.x, 2) + Math.pow(correctHandPos!.y - notePos.y, 2));
+                 
+                 const speed = handVel.length();
+                 const precision = Math.max(0, 1 - (distXY / hitRadius));
+                 let angleScore = 1.0; 
+                 if (note.cutDirection !== CutDirection.ANY) {
+                     const requiredDir = DIRECTION_VECTORS[note.cutDirection];
+                     vecB.copy(handVel).normalize();
+                     angleScore = vecB.dot(requiredDir);
+                 }
+
+                 let tier = ScoreTier.OK;
+                 if (isUltimate) {
+                     tier = ScoreTier.PERFECT;
+                 } else {
+                     const MIN_SPEED = 0.3;
+                     if (speed < MIN_SPEED) tier = ScoreTier.BAD;
+                     else if (note.cutDirection !== CutDirection.ANY && angleScore < -0.2) tier = ScoreTier.BAD;
+                     else {
+                         if (precision > 0.7 && speed > 2.0 && angleScore > 0.5) tier = ScoreTier.PERFECT;
+                         else if (precision > 0.5 && speed > 1.0) tier = ScoreTier.GREAT;
+                         else if (precision > 0.3) tier = ScoreTier.GOOD;
+                         else tier = ScoreTier.OK;
+                     }
+                 }
+
+                 note.hit = true;
+                 note.hitTime = time;
+                 handleHit(note, tier);
+                 activeNotesRef.current.splice(i, 1);
+            } else if (hitWrong) {
+                 // Trigger Penalty for Wrong Saber
+                 note.hit = true;
+                 note.hitTime = time;
+                 handleHit(note, ScoreTier.WRONG_SABER);
+                 activeNotesRef.current.splice(i, 1);
             }
         }
     }
@@ -276,7 +421,7 @@ const GameScene: React.FC<GameSceneProps> = ({
          (n.time - currentTime) < 5 && 
          (n.time - currentTime) > -2 
      );
-  }, [notesState, currentTime]);
+  }, [notesState, currentTime, noteSpeed]);
 
   const leftHandPosRef = useRef<THREE.Vector3 | null>(null);
   const rightHandPosRef = useRef<THREE.Vector3 | null>(null);
@@ -292,31 +437,51 @@ const GameScene: React.FC<GameSceneProps> = ({
 
   return (
     <>
-      <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.8, 4]} fov={60} />
-      <color attach="background" args={['#050505']} />
-      <fog ref={fogRef} attach="fog" args={['#050505', 10, 50]} />
+      <PerspectiveCamera ref={cameraRef} makeDefault position={[0, 1.8, 4]} fov={70} />
+      <color attach="background" args={['#000000']} />
       
-      <ambientLight ref={ambientLightRef} intensity={0.2} />
-      <spotLight ref={spotLightRef} position={[0, 10, 5]} angle={0.5} penumbra={1} intensity={1} castShadow />
-      
-      <Environment preset="night" />
-      
-      {/* World Visuals */}
-      <CyberTunnel speed={1.0} color={tunnelColor.current} />
-      
-      <Grid position={[0, 0, 0]} args={[6, 100]} cellThickness={0.1} cellColor="#333" sectionSize={5} sectionThickness={1.5} sectionColor={COLORS.right} fadeDistance={60} infiniteGrid />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
-          <planeGeometry args={[4, 100]} />
-          <meshStandardMaterial color="#111" roughness={0.8} metalness={0.5} />
-      </mesh>
-      
-      <Stars radius={50} depth={50} count={3000} factor={4} saturation={0} fade speed={1} />
+      {/* Lighting */}
+      <ambientLight intensity={0.2} />
+      <pointLight position={[0, 5, 5]} intensity={1 + audioPulse.current * 2} color={worldColor.current} />
+      <spotLight position={[0, 10, -50]} angle={0.5} penumbra={1} intensity={10} color={worldColor.current} />
 
-      <Saber type="left" positionRef={leftHandPosRef} velocityRef={leftHandVelRef} model={equippedSaber.id} />
-      <Saber type="right" positionRef={rightHandPosRef} velocityRef={rightHandVelRef} model={equippedSaber.id} />
+      {/* World FX */}
+      <Mountains color={worldColor.current} />
+      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={0.5} />
+      
+      {/* Moving Environment */}
+      <HexTunnel speed={noteSpeed} color={worldColor.current} intensity={audioPulse.current} />
+      <MovingFloor speed={noteSpeed} />
+      
+      {/* Atmosphere Particles */}
+      <Sparkles count={200} scale={30} size={5} speed={0.4} opacity={0.5} color={worldColor.current} />
+
+      {/* Sabers with Combo & Intensity injection */}
+      <Saber 
+         type="left" 
+         positionRef={leftHandPosRef} 
+         velocityRef={leftHandVelRef} 
+         model={equippedSaber.id} 
+         combo={combo}
+         intensityRef={intensityRef}
+      />
+      <Saber 
+         type="right" 
+         positionRef={rightHandPosRef} 
+         velocityRef={rightHandVelRef} 
+         model={equippedSaber.id} 
+         combo={combo}
+         intensityRef={intensityRef}
+      />
 
       {visibleNotes.map(note => (
-          <Note key={note.id} data={note} zPos={PLAYER_Z - ((note.time - currentTime) * NOTE_SPEED)} currentTime={currentTime} />
+          <Note 
+             key={note.id} 
+             data={note} 
+             zPos={PLAYER_Z - ((note.time - currentTime) * noteSpeed)} 
+             currentTime={currentTime} 
+             saberModel={equippedSaber.id}
+          />
       ))}
 
       {popups.map(p => (

@@ -13,6 +13,24 @@ export enum GameStatus {
   VICTORY = 'VICTORY'
 }
 
+export enum ScoreTier {
+  PERFECT = 'PERFECT',
+  GREAT = 'GREAT',
+  GOOD = 'GOOD',
+  OK = 'OK',
+  BAD = 'BAD', // Wrong direction or too slow
+  MISS = 'MISS',
+  WRONG_SABER = 'WRONG_SABER',
+  GOLD_STAR = 'GOLD_STAR'
+}
+
+export enum Difficulty {
+  EASY = 'EASY',
+  MEDIUM = 'MEDIUM',
+  HARD = 'HARD',
+  IMPOSSIBLE = 'IMPOSSIBLE'
+}
+
 export type HandType = 'left' | 'right';
 
 // 0: Up, 1: Down, 2: Left, 3: Right, 4: Any (Dot)
@@ -34,6 +52,7 @@ export interface NoteData {
   hit?: boolean;
   missed?: boolean;
   hitTime?: number; // Time when hit occurred
+  isGoldStar?: boolean;
 }
 
 export interface HandPositions {
