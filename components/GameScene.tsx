@@ -29,6 +29,18 @@ interface GameSceneProps {
 
 const BEAT_TIME = 60 / SONG_BPM;
 
+// Dummy note for shader warmup
+const WARMUP_NOTE: NoteData = {
+    id: 'warmup',
+    time: 0,
+    lineIndex: 1,
+    lineLayer: 0,
+    type: 'left',
+    cutDirection: CutDirection.DOWN,
+    hit: true, // Force explosion effect rendering
+    hitTime: 0
+};
+
 interface PopupData {
     id: number;
     position: THREE.Vector3;
@@ -455,6 +467,18 @@ const GameScene: React.FC<GameSceneProps> = ({
       
       {/* Atmosphere Particles */}
       <Sparkles count={200} scale={30} size={5} speed={0.4} opacity={0.5} color={worldColor.current} />
+
+      {/* Warmup: Render a hidden note to compile shaders before game starts */}
+      {gameStatus === GameStatus.IDLE && (
+          <group position={[0, -50, 0]} visible={true}>
+              <Note 
+                  data={WARMUP_NOTE} 
+                  zPos={0} 
+                  currentTime={0} 
+                  saberModel={equippedSaber.id} 
+              />
+          </group>
+      )}
 
       {/* Sabers with Combo & Intensity injection */}
       <Saber 

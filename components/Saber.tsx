@@ -25,7 +25,10 @@ const MATERIAL_LIBRARY = {
     gold: new THREE.MeshStandardMaterial({ color: '#FFD700', metalness: 1.0, roughness: 0.1, emissive: '#F4B400', emissiveIntensity: 0.2 }),
     blackMatte: new THREE.MeshStandardMaterial({ color: '#000000', roughness: 0.9 }),
     glowingWhite: new THREE.MeshBasicMaterial({ color: '#ffffff' }),
-    glass: new THREE.MeshPhysicalMaterial({ transmission: 0.6, opacity: 0.5, metalness: 0, roughness: 0, thickness: 0.5 })
+    glass: new THREE.MeshPhysicalMaterial({ transmission: 0.6, opacity: 0.5, metalness: 0, roughness: 0, thickness: 0.5 }),
+    bone: new THREE.MeshStandardMaterial({ color: '#e5e7eb', roughness: 0.8, metalness: 0.1 }),
+    wood: new THREE.MeshStandardMaterial({ color: '#5D4037', roughness: 0.9 }),
+    hazard: new THREE.MeshStandardMaterial({ color: '#FBC02D', roughness: 0.6, metalness: 0.4 }),
 };
 
 // --- SABER MODEL COMPONENTS ---
@@ -318,6 +321,219 @@ const KatanaSaber: React.FC<{ color: string }> = ({ color }) => (
     </group>
 );
 
+// --- NEW SABERS (10) ---
+
+const SkeletonSaber: React.FC = () => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+        {/* Vertebrae Handle */}
+        {[0, 1, 2, 3].map(i => (
+            <mesh key={i} position={[0, -0.2 + (i * 0.06), 0]} material={MATERIAL_LIBRARY.bone}>
+                <torusGeometry args={[0.04, 0.015, 8, 16]} />
+            </mesh>
+        ))}
+        {/* Bone Blade */}
+        <mesh position={[0, 0.6, 0]} material={MATERIAL_LIBRARY.bone}>
+             <cylinderGeometry args={[0.005, 0.04, 1.2, 8]} />
+        </mesh>
+        {/* Skull Guard approximation */}
+        <mesh position={[0, 0.05, 0]} material={MATERIAL_LIBRARY.bone}>
+            <sphereGeometry args={[0.07, 12, 12]} />
+        </mesh>
+    </group>
+);
+
+const GlitchSaber: React.FC<{ color: string }> = ({ color }) => {
+    const meshRef = useRef<THREE.Group>(null);
+    useFrame(() => {
+        if(meshRef.current) {
+            // Random twitch
+            meshRef.current.position.x = (Math.random() - 0.5) * 0.02;
+            meshRef.current.scale.y = 1 + (Math.random() - 0.5) * 0.1;
+        }
+    });
+    return (
+        <group rotation={[Math.PI / 2, 0, 0]} ref={meshRef}>
+            <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.blackMatte}>
+                <boxGeometry args={[0.04, 0.4, 0.04]} />
+            </mesh>
+            <mesh position={[0, 0.6, 0]}>
+                <boxGeometry args={[0.02, 1.2, 0.02]} />
+                <meshBasicMaterial color={color} wireframe toneMapped={false} />
+            </mesh>
+            <group position={[0, 0.6, 0]}>
+                {[0,1,2,3].map(i => (
+                     <mesh key={i} position={[(Math.random()-0.5)*0.1, (Math.random()-0.5)*0.6, 0]}>
+                         <boxGeometry args={[0.1, 0.02, 0.02]} />
+                         <meshBasicMaterial color="white" toneMapped={false} />
+                     </mesh>
+                ))}
+            </group>
+        </group>
+    );
+};
+
+const CrystalSaber: React.FC<{ color: string }> = ({ color }) => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+        <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.metalSilver}>
+             <cylinderGeometry args={[0.03, 0.03, 0.4, 6]} />
+        </mesh>
+        <mesh position={[0, 0.6, 0]}>
+             <cylinderGeometry args={[0.01, 0.06, 1.2, 4]} />
+             <meshPhysicalMaterial 
+                color={color} 
+                transmission={0.9} 
+                opacity={1} 
+                roughness={0} 
+                ior={2} 
+                thickness={1} 
+                emissive={color} 
+                emissiveIntensity={0.5} 
+             />
+        </mesh>
+        <Sparkles count={10} scale={[0.5, 1.2, 0.5]} size={2} color="white" />
+    </group>
+);
+
+const NatureSaber: React.FC<{ color: string }> = ({ color }) => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+         <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.wood}>
+             <cylinderGeometry args={[0.03, 0.02, 0.4, 8]} />
+         </mesh>
+         <group position={[0, 0.6, 0]}>
+             {/* Core */}
+             <mesh>
+                 <cylinderGeometry args={[0.01, 0.01, 1.2, 8]} />
+                 <meshBasicMaterial color={color} toneMapped={false} />
+             </mesh>
+             {/* Vines */}
+             <mesh>
+                 <cylinderGeometry args={[0.04, 0.04, 1.2, 5, 12, true]} />
+                 <meshBasicMaterial color="#4CAF50" wireframe transparent opacity={0.5} />
+             </mesh>
+         </group>
+         <Sparkles count={8} color="#81C784" size={3} scale={[0.5, 1, 0.5]} />
+    </group>
+);
+
+const MechaSaber: React.FC = () => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+        <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.metalDark}>
+            <boxGeometry args={[0.06, 0.4, 0.06]} />
+        </mesh>
+        <mesh position={[0, 0.6, 0]} material={MATERIAL_LIBRARY.metalSilver}>
+            <boxGeometry args={[0.1, 1.2, 0.02]} />
+        </mesh>
+        {/* Hazard Stripes */}
+        <mesh position={[0, 0.6, 0.011]} material={MATERIAL_LIBRARY.hazard}>
+            <planeGeometry args={[0.08, 1.0]} />
+        </mesh>
+        <mesh position={[0, 0.6, -0.011]} rotation={[0, Math.PI, 0]} material={MATERIAL_LIBRARY.hazard}>
+            <planeGeometry args={[0.08, 1.0]} />
+        </mesh>
+    </group>
+);
+
+const StormSaber: React.FC<{ color: string }> = ({ color }) => {
+    const ref = useRef<THREE.Group>(null);
+    useFrame(() => {
+        if(ref.current) {
+            ref.current.rotation.y += 0.5;
+            ref.current.visible = Math.random() > 0.2; // Flicker
+        }
+    });
+    return (
+        <group rotation={[Math.PI / 2, 0, 0]}>
+             <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.metalDark}>
+                 <cylinderGeometry args={[0.03, 0.03, 0.4, 8]} />
+             </mesh>
+             <group ref={ref} position={[0, 0.6, 0]}>
+                 <mesh>
+                     <cylinderGeometry args={[0.1, 0.01, 1.2, 3]} />
+                     <meshBasicMaterial color={color} wireframe toneMapped={false} />
+                 </mesh>
+             </group>
+             <mesh position={[0, 0.6, 0]}>
+                 <cylinderGeometry args={[0.02, 0.02, 1.2, 8]} />
+                 <meshBasicMaterial color="white" toneMapped={false} />
+             </mesh>
+        </group>
+    );
+};
+
+const InfernoSaber: React.FC<{ color: string }> = ({ color }) => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+        <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.blackMatte}>
+            <cylinderGeometry args={[0.03, 0.04, 0.4, 8]} />
+        </mesh>
+        <mesh position={[0, 0.6, 0]}>
+            <cylinderGeometry args={[0.04, 0.01, 1.2, 8]} />
+            <meshStandardMaterial color="#FF5722" emissive="#DD2C00" emissiveIntensity={2} />
+        </mesh>
+        <Sparkles count={30} color="#FFD54F" size={4} scale={[0.3, 1.2, 0.3]} speed={2} />
+    </group>
+);
+
+const VoidSaber: React.FC = () => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+        <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.blackMatte}>
+             <cylinderGeometry args={[0.02, 0.02, 0.4, 8]} />
+        </mesh>
+        {/* Black hole blade */}
+        <mesh position={[0, 0.6, 0]}>
+             <cylinderGeometry args={[0.04, 0.04, 1.2, 16]} />
+             <meshBasicMaterial color="black" />
+        </mesh>
+        {/* Purple aura */}
+        <mesh position={[0, 0.6, 0]} scale={[1.2, 1.05, 1.2]}>
+             <cylinderGeometry args={[0.04, 0.04, 1.2, 16]} />
+             <meshBasicMaterial color="#9C27B0" transparent opacity={0.3} toneMapped={false} side={THREE.BackSide} />
+        </mesh>
+    </group>
+);
+
+const CelestialSaber: React.FC<{ color: string }> = ({ color }) => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+        <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.glowingWhite}>
+             <cylinderGeometry args={[0.02, 0.02, 0.4, 8]} />
+        </mesh>
+        <mesh position={[0, 0.6, 0]}>
+             <cylinderGeometry args={[0.01, 0.01, 1.2, 8]} />
+             <meshBasicMaterial color="white" toneMapped={false} />
+        </mesh>
+        {/* Rings */}
+        <group position={[0, 0.3, 0]} rotation={[0.5, 0, 0]}>
+            <mesh>
+                <torusGeometry args={[0.1, 0.005, 8, 32]} />
+                <meshBasicMaterial color="#FFD700" toneMapped={false} />
+            </mesh>
+        </group>
+        <group position={[0, 0.9, 0]} rotation={[-0.5, 0, 0]}>
+            <mesh>
+                <torusGeometry args={[0.1, 0.005, 8, 32]} />
+                <meshBasicMaterial color="#FFD700" toneMapped={false} />
+            </mesh>
+        </group>
+        <Sparkles count={20} color={color} size={3} scale={[0.5, 1.2, 0.5]} />
+    </group>
+);
+
+const NeonSaber: React.FC<{ color: string }> = ({ color }) => (
+    <group rotation={[Math.PI / 2, 0, 0]}>
+        <mesh position={[0, -0.2, 0]} material={MATERIAL_LIBRARY.blackMatte}>
+             <boxGeometry args={[0.08, 0.4, 0.02]} />
+        </mesh>
+        {/* Dual neon tubes */}
+        <mesh position={[-0.03, 0.6, 0]}>
+             <cylinderGeometry args={[0.01, 0.01, 1.2, 8]} />
+             <meshBasicMaterial color="#00E5FF" toneMapped={false} />
+        </mesh>
+        <mesh position={[0.03, 0.6, 0]}>
+             <cylinderGeometry args={[0.01, 0.01, 1.2, 8]} />
+             <meshBasicMaterial color="#F50057" toneMapped={false} />
+        </mesh>
+    </group>
+);
+
 const UltimateSaber: React.FC<{ color: string, intensityRef: React.MutableRefObject<number> }> = ({ color, intensityRef }) => {
     const coreRef = useRef<THREE.Mesh>(null);
     const ringRef = useRef<THREE.Group>(null);
@@ -401,6 +617,8 @@ const Saber: React.FC<SaberProps> = ({ type, positionRef, velocityRef, model, co
       if (model === 'rapier') width = 0.3;
       if (model === 'broadsword') width = 1.2;
       if (model === 'pixel') length = 2; // Short trail for digital feel
+      if (model === 'glitch') { length = 1.5; width = 0.4; }
+      if (model === 'void') { width = 1.5; decay = 2; }
       if (model === 'ultimate_eudin') { width = 1.0; length = 8; }
 
       return { width, length, decay, trailColor };
@@ -448,6 +666,19 @@ const Saber: React.FC<SaberProps> = ({ type, positionRef, velocityRef, model, co
           case 'bass': return <BassSaber color={color} intensityRef={intensityRef} />;
           case 'katana': return <KatanaSaber color={color} />;
           case 'scythe': return <ScytheSaber color={color} intensityRef={intensityRef} />;
+          
+          // New Sabers
+          case 'skeleton': return <SkeletonSaber />;
+          case 'glitch': return <GlitchSaber color={color} />;
+          case 'crystal': return <CrystalSaber color={color} />;
+          case 'nature': return <NatureSaber color={color} />;
+          case 'mecha': return <MechaSaber />;
+          case 'storm': return <StormSaber color={color} />;
+          case 'inferno': return <InfernoSaber color={color} />;
+          case 'void': return <VoidSaber />;
+          case 'celestial': return <CelestialSaber color={color} />;
+          case 'neon': return <NeonSaber color={color} />;
+
           case 'ultimate_eudin': return <UltimateSaber color={color} intensityRef={intensityRef} />;
           default: return <DefaultSaber color={color} intensityRef={intensityRef} />;
       }

@@ -147,18 +147,8 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
     }
   }, [videoRef]);
 
-  // 3. Auto-start camera when model is loaded (Attempt ONCE)
-  const autoStartAttempted = useRef(false);
-
-  useEffect(() => {
-      // We only want to try auto-starting once when the model is ready.
-      // If it fails (e.g. needs gesture), we stop and let the user manually trigger it via button.
-      if (isModelLoaded && !isCameraReady && !autoStartAttempted.current) {
-          autoStartAttempted.current = true;
-          startCamera();
-      }
-  }, [isModelLoaded, isCameraReady, startCamera]);
-
+  // 3. Removed Auto-start to prevent "NotAllowedError" in strict browsers.
+  // The UI will now explicitly ask the user to click a button.
 
   // 4. Prediction Loop
   const predictWebcam = useCallback(() => {
@@ -240,5 +230,5 @@ export const useMediaPipe = (videoRef: React.RefObject<HTMLVideoElement | null>)
       }
   }, [isCameraReady, isModelLoaded, predictWebcam]);
 
-  return { isCameraReady, handPositionsRef, lastResultsRef, error, requestCameraPermission: startCamera };
+  return { isCameraReady, handPositionsRef, lastResultsRef, error, isModelLoaded, requestCameraPermission: startCamera };
 };

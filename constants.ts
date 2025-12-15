@@ -99,7 +99,7 @@ export const SABER_CATALOG: ShopItem[] = [
     name: 'Heavy Titan', 
     price: 1500, 
     description: 'Huge hit area, but yields less coins.',
-    perks: { scoreMult: 1.0, coinMult: 0.8, hitWindow: 1.4 } // Buffed hitWindow
+    perks: { scoreMult: 1.0, coinMult: 0.8, hitWindow: 1.4 } 
   },
   { 
     id: 'viper', 
@@ -107,6 +107,13 @@ export const SABER_CATALOG: ShopItem[] = [
     price: 1800, 
     description: 'Swift strikes. High precision yields higher scores.',
     perks: { scoreMult: 1.35, coinMult: 1.0, hitWindow: 0.85 }
+  },
+  {
+    id: 'skeleton',
+    name: 'Bone Harvester',
+    price: 2500,
+    description: 'Forged from the remains of ancient beasts.',
+    perks: { scoreMult: 1.1, coinMult: 1.3, hitWindow: 1.1 }
   },
   { 
     id: 'plasma', 
@@ -122,6 +129,13 @@ export const SABER_CATALOG: ShopItem[] = [
     description: 'Resonates with the beat. Expansive hit area.',
     perks: { scoreMult: 0.9, coinMult: 1.1, hitWindow: 1.3 }
   },
+  {
+    id: 'glitch',
+    name: 'Data Corruptor',
+    price: 4500,
+    description: 'Unstable code manifested as a weapon.',
+    perks: { scoreMult: 1.4, coinMult: 1.1, hitWindow: 0.9 }
+  },
   { 
     id: 'katana', 
     name: 'Neon Katana', 
@@ -129,12 +143,68 @@ export const SABER_CATALOG: ShopItem[] = [
     description: 'The sharpest edge. Massive score potential.',
     perks: { scoreMult: 1.6, coinMult: 1.1, hitWindow: 0.95 }
   },
+  {
+    id: 'crystal',
+    name: 'Prism Shard',
+    price: 6000,
+    description: 'Refracts light into pure damage.',
+    perks: { scoreMult: 1.3, coinMult: 1.4, hitWindow: 1.0 }
+  },
   { 
     id: 'scythe', 
     name: 'Cyber Scythe', 
     price: 6500, 
     description: 'Harvest the rhythm. Superior stats for the elite.',
     perks: { scoreMult: 1.5, coinMult: 1.3, hitWindow: 1.0 }
+  },
+  {
+    id: 'nature',
+    name: 'Verdant Keeper',
+    price: 8500,
+    description: 'Life and death intertwined.',
+    perks: { scoreMult: 1.2, coinMult: 1.6, hitWindow: 1.2 }
+  },
+  {
+    id: 'mecha',
+    name: 'Mecha Striker',
+    price: 10000,
+    description: 'Industrial grade cutting tool.',
+    perks: { scoreMult: 1.5, coinMult: 1.0, hitWindow: 1.3 }
+  },
+  {
+    id: 'storm',
+    name: 'Thunder Caller',
+    price: 12000,
+    description: 'Harness the power of the storm.',
+    perks: { scoreMult: 1.6, coinMult: 1.2, hitWindow: 1.0 }
+  },
+  {
+    id: 'inferno',
+    name: 'Hellfire',
+    price: 14000,
+    description: 'Burns everything it touches.',
+    perks: { scoreMult: 1.7, coinMult: 1.0, hitWindow: 1.1 }
+  },
+  {
+    id: 'void',
+    name: 'Void Eater',
+    price: 16500,
+    description: 'Consumes light and sound.',
+    perks: { scoreMult: 1.8, coinMult: 1.1, hitWindow: 0.9 }
+  },
+  {
+    id: 'celestial',
+    name: 'Star Forged',
+    price: 20000,
+    description: 'A shard of a dying star.',
+    perks: { scoreMult: 2.0, coinMult: 1.5, hitWindow: 1.1 }
+  },
+  {
+    id: 'neon',
+    name: 'Synthwave X',
+    price: 25000,
+    description: 'Maximum aesthetic, maximum power.',
+    perks: { scoreMult: 2.2, coinMult: 2.0, hitWindow: 1.2 }
   },
   { 
     id: 'ultimate_eudin', 
