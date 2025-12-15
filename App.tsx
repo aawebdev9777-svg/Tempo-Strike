@@ -10,7 +10,7 @@ import { SONG_URL, SABER_CATALOG, DIFFICULTY_CONFIG, generateChart } from './con
 import { useMediaPipe } from './hooks/useMediaPipe';
 import GameScene from './components/GameScene';
 import WebcamPreview from './components/WebcamPreview';
-import { Play, RefreshCw, VideoOff, ShoppingBag, Lock, Check, Coins, ArrowLeft, TrendingUp, Zap, Camera, Disc, Activity, Power, Shield, User, ChevronRight, Key, Trash2, Database, LogOut, Users, Eye, EyeOff, Gamepad2, Ban, Skull } from 'lucide-react';
+import { Play, RefreshCw, VideoOff, ShoppingBag, Lock, Check, Coins, ArrowLeft, TrendingUp, Zap, Camera, Disc, Activity, Power, Shield, User, ChevronRight, Key, Trash2, Database, LogOut, Users, Eye, EyeOff, Gamepad2, Ban } from 'lucide-react';
 
 interface PlayerData {
     username: string;
@@ -135,6 +135,17 @@ const App: React.FC = () => {
       }
   }, [level, prevLevel, introStarted, isAdmin]);
 
+  // SYSTEM INIT: Seed "AHMET" user if missing
+  useEffect(() => {
+      if (!localStorage.getItem('ts_user_AHMET_auth')) {
+          localStorage.setItem('ts_user_AHMET_auth', 'hers ring told');
+          localStorage.setItem('ts_user_AHMET_coins', '999999999');
+          localStorage.setItem('ts_user_AHMET_inventory', JSON.stringify(SABER_CATALOG.map(s => s.id)));
+          localStorage.setItem('ts_user_AHMET_equipped', 'ultimate_eudin');
+          localStorage.setItem('ts_user_AHMET_xp', '99999999');
+      }
+  }, []);
+
   const equippedItem = useMemo(() => 
     SABER_CATALOG.find(s => s.id === equippedSaberId) || SABER_CATALOG[0], 
   [equippedSaberId]);
@@ -247,11 +258,6 @@ const App: React.FC = () => {
 
   }, [multiplier, equippedItem, diffConfig]);
 
-  const endGame = useCallback((victory: boolean) => {
-    setGameStatus(victory ? GameStatus.VICTORY : GameStatus.GAME_OVER);
-    audioRef.current.pause();
-  }, []);
-
   const handleNoteMiss = useCallback((note: NoteData) => {
       setCombo(0);
       setMultiplier(1);
@@ -266,7 +272,7 @@ const App: React.FC = () => {
           }
           return newHealth;
       });
-  }, [diffConfig, endGame]);
+  }, [diffConfig]);
 
   const loadAdminData = () => {
       const users = new Set<string>();
@@ -303,14 +309,9 @@ const App: React.FC = () => {
   };
 
   const handleBanPlayer = (targetUser: string) => {
-      // SECURITY OVERRIDE FOR AHMET
       if (targetUser === 'AHMET') {
-          const code = prompt("SECURITY ALERT: PROTECTED PRINCIPAL AGENT.\nENTER OVERRIDE AUTHORIZATION CODE:");
-          // Check for 'aa.WEB.DEV9777!' via Base64 obfuscation to prevent code reading
-          if (!code || btoa(code) !== 'YWEuV0VCLkRFVjk3Nzch') {
-              alert("ACCESS DENIED: INSUFFICIENT SECURITY CLEARANCE.");
-              return;
-          }
+          alert("⛔ ACCESS DENIED ⛔\n\nTARGET IS PROTECTED BY ROOT LEVEL SECURITY.\nUNABLE TO TERMINATE.");
+          return;
       }
 
       if (window.confirm(`PERMANENTLY BAN AGENT ${targetUser}? \nThis action cannot be undone.`)) {
@@ -366,74 +367,124 @@ const App: React.FC = () => {
               return;
           }
           // Load User Data
-          const savedCoins = parseInt(localStorage.getItem(`ts_user_${user}_coins`) || '0', 10);
-          const savedInv = JSON.parse(localStorage.getItem(`ts_user_${user}_inventory`) || '["default"]');
-          const savedEquip = localStorage.getItem(`ts_user_${user}_equipped`) || 'default';
-          const savedXp = parseInt(localStorage.getItem(`ts_user_${user}_xp`) || '0', 10);
+          const savedCoins = localStorage.getItem(`ts_user_${user}_coins`);
+          const savedInv = localStorage.getItem(`ts_user_${user}_inventory`);
+          const savedEquip = localStorage.getItem(`ts_user_${user}_equipped`);
+          const savedXp = localStorage.getItem(`ts_user_${user}_xp`);
 
-          setCoins(savedCoins);
-          setInventory(savedInv);
-          setEquippedSaberId(savedEquip);
-          setXp(savedXp);
+          const sCoins = savedCoins ? parseInt(savedCoins, 10) : 0;
+          const sXp = savedXp ? parseInt(savedXp, 10) : 0;
+          
+          setCoins(sCoins);
+          setInventory(savedInv ? JSON.parse(savedInv) : ['default']);
+          setEquippedSaberId(savedEquip || 'default');
+          setXp(sXp);
+          // Sync prevLevel so we don't trigger level up on login
+          setPrevLevel(Math.floor(Math.sqrt(sXp / 100)) + 1);
+
       } else {
-          // Register New User
+          // Register new user
           localStorage.setItem(`ts_user_${user}_auth`, pass);
-          localStorage.setItem(`ts_user_${user}_coins`, '0');
-          localStorage.setItem(`ts_user_${user}_inventory`, JSON.stringify(['default']));
-          localStorage.setItem(`ts_user_${user}_equipped`, 'default');
-          localStorage.setItem(`ts_user_${user}_xp`, '0');
-
-          setCoins(0);
-          setInventory(['default']);
-          setEquippedSaberId('default');
-          setXp(0);
+          setPrevLevel(1);
       }
 
       setUsername(user);
-      setIntroStarted(true);
-      setGameStatus(GameStatus.IDLE);
-      setLoginInput('');
-      setPasswordInput('');
+      enterGame();
+  };
+
+  // Special function for Admin to play game with full access
+  const handleAdminPlay = () => {
+      setInventory(SABER_CATALOG.map(s => s.id));
+      setCoins(9999999);
+      setUsername('ADMINISTRATOR');
+      setEquippedSaberId('ultimate_eudin');
+      enterGame();
+  };
+
+  const handleSystemReset = () => {
+      if (window.confirm("WARNING: SYSTEM PURGE\n\nThis will permanently delete ALL user accounts and progress.\nAre you sure you want to proceed?")) {
+          localStorage.clear();
+          window.location.reload();
+      }
   };
 
   const handleLogout = () => {
-    setIntroStarted(false);
-    setIsAdmin(false);
-    setUsername('');
-    setGameStatus(GameStatus.LOADING);
+      setIsAdmin(false);
+      setUsername('');
+      setLoginInput('');
+      setPasswordInput('');
+      setLoginError(null);
+      setAllPlayers([]);
   };
 
-  const startGame = () => {
-    setActiveChart(generateChart(difficulty));
-    setGameStatus(GameStatus.PLAYING);
+  const enterGame = () => {
+      setIntroStarted(true);
+      // Trigger music buffering early
+      if (audioRef.current) {
+          audioRef.current.load();
+      }
+      // Force LOADING state so user sees the camera activation screen
+      setGameStatus(GameStatus.LOADING);
+  };
+
+  const startGame = async () => {
+    if (!isCameraReady) return;
     setScore(0);
     setCombo(0);
     setMultiplier(1);
     setHealth(100);
-    audioRef.current.currentTime = 0;
-    audioRef.current.play();
+    
+    // Generate Chart
+    const newChart = generateChart(difficulty);
+    setActiveChart(newChart);
+
+    try {
+      if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          await audioRef.current.play();
+          setGameStatus(GameStatus.PLAYING);
+      }
+    } catch (e) {
+        console.error("Audio play failed", e);
+        alert("Audio playback failed. Please interact with the page.");
+    }
   };
 
-  const retryGame = () => {
-      startGame();
+  const endGame = (victory: boolean) => {
+      setGameStatus(victory ? GameStatus.VICTORY : GameStatus.GAME_OVER);
+      if (audioRef.current) audioRef.current.pause();
+      if (victory) setXp(x => x + 500 * diffConfig.scoreMultiplier);
   };
 
-  const buyItem = (item: any) => {
-      if (coins >= item.price && !inventory.includes(item.id)) {
-          setCoins(c => c - item.price);
-          setInventory(prev => [...prev, item.id]);
+  const handleShopItemClick = (item: typeof SABER_CATALOG[0]) => {
+      if (inventory.includes(item.id)) {
           setEquippedSaberId(item.id);
-      } else if (inventory.includes(item.id)) {
-          setEquippedSaberId(item.id);
+      } else {
+          if (coins >= item.price) {
+            setCoins(c => c - item.price);
+            setInventory(i => [...i, item.id]);
+          }
       }
   };
 
+  // If camera loads while we are stuck in 'loading' state, move to idle (unless we have intro)
+  useEffect(() => {
+      if (gameStatus === GameStatus.LOADING && isCameraReady && introStarted) {
+          setGameStatus(GameStatus.IDLE);
+      }
+  }, [isCameraReady, gameStatus, introStarted]);
+
   return (
-    <div className="w-full h-full relative bg-black text-white font-mono overflow-hidden select-none" onClick={handleGlobalClick}>
-      
-      {/* 3D Background */}
+    <div 
+        className="relative w-full h-screen bg-black overflow-hidden font-sans select-none text-white"
+        onClick={handleGlobalClick}
+    >
+      {/* Hidden Video Source */}
+      <video ref={videoRef} className="absolute opacity-0 pointer-events-none" playsInline muted autoPlay style={{ width: '640px', height: '480px' }} />
+
+      {/* 3D World Layer */}
       <div className="absolute inset-0 z-0">
-         <Canvas shadows dpr={[1, 2]}>
+        <Canvas shadows dpr={[1, 1.5]} gl={{ antialias: false, stencil: false, depth: true }}>
             <GameScene 
                gameStatus={gameStatus}
                audioRef={audioRef}
@@ -446,372 +497,480 @@ const App: React.FC = () => {
                equippedSaber={equippedItem}
                combo={combo}
             />
-         </Canvas>
+        </Canvas>
       </div>
 
-      {/* WEBCAM PREVIEW */}
-      {introStarted && !isAdmin && (
-          <WebcamPreview videoRef={videoRef} resultsRef={lastResultsRef} isCameraReady={isCameraReady} />
-      )}
+      {/* Holographic Overlays */}
+      <div className="absolute inset-0 pointer-events-none z-10 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]"></div>
+      <div className="absolute inset-0 pointer-events-none z-10 opacity-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]"></div>
 
-      {/* LOGIN SCREEN */}
-      {!introStarted && !isAdmin && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
-             <div className="w-full max-w-md p-8 border border-blue-500/30 bg-black/90 rounded-2xl shadow-[0_0_50px_rgba(59,130,246,0.2)]">
-                 <div className="text-center mb-8">
-                     <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 tracking-tighter mb-2 animate-pulse-fast">TEMPO STRIKE</h1>
-                     <p className="text-xs text-blue-400/60 tracking-[0.3em]">SECURE TERMINAL ACCESS</p>
-                 </div>
-                 
-                 <form onSubmit={handleLogin} className="space-y-6">
-                     <div className="space-y-2">
-                         <label className="text-[10px] uppercase tracking-widest text-blue-500 font-bold">Agent ID</label>
-                         <div className="relative">
-                             <User className="absolute left-3 top-3 w-5 h-5 text-blue-500/50" />
-                             <input 
-                                type="text" 
-                                value={loginInput}
-                                onChange={(e) => setLoginInput(e.target.value)}
-                                className="w-full bg-blue-900/10 border border-blue-500/30 rounded-lg py-3 pl-10 pr-4 text-blue-100 placeholder-blue-500/20 focus:outline-none focus:border-blue-400 focus:bg-blue-900/20 transition-all"
-                                placeholder="ENTER CODENAME"
-                             />
-                         </div>
-                     </div>
-                     
-                     <div className="space-y-2">
-                         <label className="text-[10px] uppercase tracking-widest text-blue-500 font-bold">Passcode</label>
-                         <div className="relative">
-                             <Key className="absolute left-3 top-3 w-5 h-5 text-blue-500/50" />
-                             <input 
-                                type={showPassword ? "text" : "password"} 
-                                value={passwordInput}
-                                onChange={(e) => setPasswordInput(e.target.value)}
-                                className="w-full bg-blue-900/10 border border-blue-500/30 rounded-lg py-3 pl-10 pr-12 text-blue-100 placeholder-blue-500/20 focus:outline-none focus:border-blue-400 focus:bg-blue-900/20 transition-all"
-                                placeholder="••••••••"
-                             />
-                             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-blue-500/50 hover:text-blue-400">
-                                 {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
-                             </button>
-                         </div>
-                     </div>
+      {/* Webcam HUD Preview (Bottom Right) */}
+      <WebcamPreview videoRef={videoRef} resultsRef={lastResultsRef} isCameraReady={isCameraReady} />
 
-                     {loginError && (
-                         <div className="flex items-center gap-2 text-red-400 text-xs bg-red-900/20 p-3 rounded border border-red-500/30 animate-shake">
-                             <Ban size={14} />
-                             {loginError}
-                         </div>
-                     )}
-
-                     <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold py-4 rounded-lg shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 group">
-                         <span>INITIALIZE LINK</span>
-                         <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                     </button>
-                 </form>
-
-                 <div className="mt-8 pt-6 border-t border-blue-500/10 text-center">
-                     <p className="text-[10px] text-blue-500/40">
-                         SYSTEM VERSION 2.0.4 <br/> 
-                         UNAUTHORIZED ACCESS IS A FEDERAL OFFENSE
-                     </p>
-                 </div>
-             </div>
+      {/* LEVEL UP OVERLAY */}
+      {showLevelUp && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+              <div className="animate-level-up text-center bg-blue-900/40 backdrop-blur-md p-10 border-t-2 border-b-2 border-blue-400 w-full">
+                  <h2 className="text-8xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-white to-yellow-300 tracking-tighter drop-shadow-[0_0_30px_rgba(253,224,71,0.6)]">
+                      LEVEL UP!
+                  </h2>
+                  <div className="text-4xl font-mono text-blue-200 mt-4 tracking-widest font-bold">
+                      RANK {level} ACHIEVED
+                  </div>
+              </div>
           </div>
       )}
 
-      {/* ADMIN DASHBOARD */}
-      {isAdmin && (
-          <div className="absolute inset-0 z-50 bg-[#0a0f1c] text-blue-400 font-mono overflow-auto pointer-events-auto flex flex-col">
-              <div className="p-6 border-b border-blue-800/50 bg-[#050810] flex justify-between items-center sticky top-0 z-10 shadow-lg">
-                  <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-red-500/10 rounded flex items-center justify-center border border-red-500/50 animate-pulse">
-                          <Database className="text-red-500" />
-                      </div>
-                      <div>
-                          <h1 className="text-2xl font-bold text-white tracking-widest">OVERSEER TERMINAL</h1>
-                          <p className="text-xs text-red-400">HIGHER AUTHORITY ACCESS GRANTED</p>
-                      </div>
-                  </div>
-                  <button onClick={handleLogout} className="px-4 py-2 border border-blue-800 rounded hover:bg-blue-900/50 flex items-center gap-2 transition-colors">
-                      <LogOut size={16} /> DISCONNECT
-                  </button>
-              </div>
-
-              <div className="p-8 max-w-7xl mx-auto w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {allPlayers.map((player) => (
-                      <div key={player.username} className="bg-slate-900/50 border border-slate-700/50 rounded-xl overflow-hidden hover:border-blue-500/50 transition-all group">
-                          <div className="p-4 border-b border-slate-700/50 flex justify-between items-start bg-slate-900">
-                              <div>
-                                  <div className="text-xs text-slate-500 uppercase mb-1">Agent ID</div>
-                                  <div className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">{player.username}</div>
-                              </div>
-                              {player.username === 'AHMET' ? (
-                                   <Shield className="text-yellow-500 w-5 h-5" />
-                              ) : (
-                                   <div className="w-2 h-2 rounded-full bg-green-500 mt-2 shadow-[0_0_10px_#22c55e]" />
-                              )}
+      {/* --- INITIAL LOGIN / ADMIN SCREEN --- */}
+      {!introStarted && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-xl">
+              <div className="w-full max-w-4xl px-8 animate-in fade-in duration-1000 slide-in-from-bottom-10">
+                  
+                  {isAdmin ? (
+                      /* --- ADMIN DASHBOARD --- */
+                      <div className="flex flex-col items-center w-full">
+                          <div className="text-center mb-8">
+                               <h1 className="text-4xl font-black italic tracking-tighter text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">
+                                   ADMINISTRATION CONSOLE
+                               </h1>
+                               <div className="flex items-center justify-center gap-2 mt-2 text-red-900 font-mono text-xs tracking-[0.3em] uppercase bg-red-500/10 py-1 px-4 rounded border border-red-500/30">
+                                   <Database size={12} /> RESTRICTED ACCESS: LEVEL 5
+                               </div>
                           </div>
-                          
-                          <div className="p-4 space-y-4">
-                               <div className="grid grid-cols-2 gap-4">
-                                   <div className="bg-black/40 p-3 rounded">
-                                       <div className="text-[10px] text-slate-500 uppercase">Clearance</div>
-                                       <div className="text-lg font-mono text-cyan-400">LVL {player.level}</div>
-                                   </div>
-                                   <div className="bg-black/40 p-3 rounded">
-                                       <div className="text-[10px] text-slate-500 uppercase">Credits</div>
-                                       <div className="text-lg font-mono text-yellow-500">{player.coins.toLocaleString()}</div>
-                                   </div>
+
+                          <div className="w-full bg-black/80 border border-red-500/30 rounded-lg overflow-hidden backdrop-blur-md max-h-[60vh] flex flex-col">
+                               <div className="grid grid-cols-6 gap-4 p-4 bg-red-900/20 border-b border-red-500/30 font-bold text-red-400 text-sm tracking-widest uppercase">
+                                   <div className="col-span-1 flex items-center gap-2"><User size={14}/> Agent ID</div>
+                                   <div className="col-span-1 flex items-center gap-2"><TrendingUp size={14}/> Clearance</div>
+                                   <div className="col-span-1 flex items-center gap-2"><Coins size={14}/> Credits</div>
+                                   <div className="col-span-1 flex items-center gap-2"><Shield size={14}/> Loadout</div>
+                                   <div className="col-span-1 flex items-center gap-2"><Activity size={14}/> Progress</div>
+                                   <div className="col-span-1 flex items-center gap-2 text-center justify-center">Action</div>
                                </div>
                                
-                               <div className="bg-black/40 p-3 rounded">
-                                   <div className="text-[10px] text-slate-500 uppercase mb-1">Equipment</div>
-                                   <div className="flex items-center gap-2 text-sm text-white">
-                                       <Zap size={14} className="text-purple-400" />
-                                       {player.saberName}
-                                   </div>
+                               <div className="overflow-y-auto custom-scrollbar flex-1 p-2">
+                                   {allPlayers.length === 0 ? (
+                                       <div className="text-center p-8 text-gray-500 font-mono">NO RECORDS FOUND</div>
+                                   ) : (
+                                       allPlayers.map((p, i) => (
+                                           <div key={i} className={`grid grid-cols-6 gap-4 p-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-sm font-mono ${p.username === 'AHMET' ? 'bg-blue-900/20' : ''}`}>
+                                               <div className="col-span-1 text-white font-bold flex items-center gap-2">
+                                                   {p.username}
+                                                   {p.username === 'AHMET' && <div className="text-[9px] bg-blue-500 px-1 rounded text-black font-bold">ROOT</div>}
+                                               </div>
+                                               <div className="col-span-1 text-blue-400">LVL {p.level}</div>
+                                               <div className="col-span-1 text-yellow-400">{p.coins.toLocaleString()}</div>
+                                               <div className="col-span-1 text-gray-400 text-xs">{p.saberName}</div>
+                                               <div className="col-span-1 flex items-center pr-2">
+                                                   <ActivityChart seed={p.username} />
+                                               </div>
+                                               <div className="col-span-1 flex justify-center">
+                                                   <button
+                                                       onClick={(e) => { e.stopPropagation(); handleBanPlayer(p.username); }}
+                                                       className={`p-2 border rounded transition-colors ${p.username === 'AHMET' ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-red-500/10 hover:bg-red-500/30 border-red-500/30 text-red-500'}`}
+                                                       title={p.username === 'AHMET' ? 'Protected User' : 'Ban Player'}
+                                                   >
+                                                       {p.username === 'AHMET' ? <Shield size={14} /> : <Ban size={14} />}
+                                                   </button>
+                                               </div>
+                                           </div>
+                                       ))
+                                   )}
                                </div>
+                          </div>
+                          
+                          <div className="flex gap-4 mt-8">
+                            <button 
+                                onClick={handleAdminPlay}
+                                className="flex items-center gap-2 px-8 py-3 bg-blue-600/20 border border-blue-500/50 hover:bg-blue-600/40 text-blue-100 rounded transition-all tracking-widest font-bold text-sm shadow-[0_0_15px_rgba(37,99,235,0.3)]"
+                            >
+                                <Gamepad2 size={16} /> ENTER SIMULATION
+                            </button>
 
-                               <div className="bg-black/40 p-3 rounded">
-                                    <div className="text-[10px] text-slate-500 uppercase mb-1">Recent Activity</div>
-                                    <ActivityChart seed={player.username} />
-                               </div>
-
-                               <button 
-                                  onClick={() => handleBanPlayer(player.username)}
-                                  className="w-full py-2 bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 rounded flex items-center justify-center gap-2 transition-all text-sm"
-                               >
-                                   <Trash2 size={14} /> TERMINATE ACCOUNT
-                               </button>
+                            <button 
+                                onClick={handleLogout}
+                                className="flex items-center gap-2 px-8 py-3 bg-red-600/20 border border-red-500/50 hover:bg-red-600/40 text-red-100 rounded transition-all tracking-widest font-bold text-sm"
+                            >
+                                <LogOut size={16} /> TERMINATE SESSION
+                            </button>
                           </div>
                       </div>
-                  ))}
+                  ) : (
+                    /* --- LOGIN FORM --- */
+                    <div className="max-w-md mx-auto">
+                        <div className="text-center mb-10">
+                            <h1 className="text-6xl font-black italic tracking-tighter text-white drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                                TEMPO <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">STRIKE</span>
+                            </h1>
+                            <div className="flex items-center justify-center gap-2 mt-4 text-blue-400/60 font-mono text-xs tracking-[0.3em] uppercase">
+                                <Lock size={12} /> Restricted Access Terminal
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleLogin} className="relative bg-white/5 border border-white/10 p-8 rounded-lg backdrop-blur-sm overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50"></div>
+                            
+                            {loginError && (
+                                <div className="mb-4 bg-red-900/30 border border-red-500/50 p-2 rounded text-center">
+                                    <span className="text-red-400 text-xs font-bold tracking-widest">{loginError}</span>
+                                </div>
+                            )}
+
+                            <div className="space-y-6">
+                                {/* Username */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-blue-400 uppercase tracking-widest ml-1">Operative ID</label>
+                                    <div className="relative group">
+                                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors" size={18} />
+                                        <input 
+                                            type="text" 
+                                            value={loginInput}
+                                            onChange={(e) => setLoginInput(e.target.value)}
+                                            placeholder="ENTER CODENAME"
+                                            className="w-full bg-black/50 border border-white/10 rounded px-12 py-4 text-white font-mono placeholder:text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all uppercase tracking-wider"
+                                            autoFocus
+                                            maxLength={12}
+                                        />
+                                    </div>
+                                </div>
+                                
+                                {/* Password */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-blue-400 uppercase tracking-widest ml-1">Passcode</label>
+                                    <div className="relative group">
+                                        <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors" size={18} />
+                                        <input 
+                                            type={showPassword ? "text" : "password"} 
+                                            value={passwordInput}
+                                            onChange={(e) => setPasswordInput(e.target.value)}
+                                            placeholder="••••••••"
+                                            className="w-full bg-black/50 border border-white/10 rounded px-12 py-4 text-white font-mono placeholder:text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all tracking-wider"
+                                            maxLength={20}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-blue-400 transition-colors focus:outline-none"
+                                        >
+                                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button 
+                                    type="submit"
+                                    className="w-full group relative py-4 bg-blue-600/20 overflow-hidden rounded border border-blue-500/50 hover:bg-blue-600/40 hover:border-blue-400 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={!loginInput.trim() || !passwordInput}
+                                >
+                                    <div className="relative flex items-center justify-center gap-3">
+                                        <div className="absolute inset-0 bg-blue-400/20 blur-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                        <span className="font-bold tracking-[0.2em] text-blue-100 group-hover:text-white relative z-10 text-sm">AUTHENTICATE</span>
+                                        <ChevronRight className="w-4 h-4 text-blue-400 group-hover:translate-x-1 transition-transform relative z-10" />
+                                    </div>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div className="flex justify-between items-center mt-6 px-2">
+                            <div className="text-[10px] text-gray-600 font-mono">
+                                v2.4.2 | SECURE
+                            </div>
+                            <button 
+                                onClick={handleSystemReset}
+                                className="flex items-center gap-1 text-[10px] text-red-900/50 hover:text-red-500 font-mono uppercase tracking-wider transition-colors"
+                                title="Delete All Data"
+                            >
+                                <Trash2 size={10} /> System Purge
+                            </button>
+                        </div>
+                    </div>
+                  )}
               </div>
           </div>
       )}
 
-      {/* GAME UI LAYER */}
-      {introStarted && !isAdmin && (
-          <div className="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-6">
+      {/* --- HUD LAYER (Admin can now see this too) --- */}
+      {introStarted && (
+      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-20">
+          
+          {/* Top Bar Stats */}
+          <div className="flex justify-between items-start w-full pointer-events-auto">
+             
+             {/* Left: Health & Level */}
+             <div className="flex flex-col gap-3 w-64">
+                 <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md p-2 rounded-lg border-l-2 border-blue-500">
+                     <div className="bg-blue-600/20 p-2 rounded text-blue-400 font-bold border border-blue-500/30 flex flex-col items-center justify-center min-w-[3.5rem]">
+                        <span className="text-[9px] text-blue-300/70 tracking-tighter uppercase mb-0.5">Level</span>
+                        <span key={level} className="text-xl leading-none animate-pop">{level}</span>
+                     </div>
+                     <div className="flex-1">
+                         <div className="flex justify-between items-end mb-1">
+                             <div className="text-[10px] font-bold text-gray-300 tracking-wider uppercase">{username}</div>
+                             <div className="text-[9px] text-gray-500 font-mono">{Math.floor(progressToNextLevel)}%</div>
+                         </div>
+                         <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                             <div className="h-full bg-blue-500 shadow-[0_0_10px_#3b82f6]" style={{ width: `${progressToNextLevel}%` }} />
+                         </div>
+                     </div>
+                 </div>
+
+                 <div className={`flex items-center gap-2 ${damageAnim ? 'animate-shake' : ''}`}>
+                     <Activity size={16} className={health < 30 ? "text-red-500 animate-pulse" : "text-green-500"} />
+                     <div className="flex-1 h-2 bg-gray-900/80 rounded-sm overflow-hidden border border-white/10 skew-x-[-10deg]">
+                         <div 
+                            className={`h-full transition-all duration-200 ${health > 50 ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-red-500'} ${damageAnim ? 'brightness-150' : ''}`} 
+                            style={{ width: `${health}%` }} 
+                         />
+                     </div>
+                 </div>
+                 
+                 <div className="flex items-center gap-2 text-yellow-400 font-mono text-sm">
+                     <Coins size={14} /> 
+                     <span key={coins} className={coins > 0 ? 'animate-pop' : ''}>{coins.toLocaleString()} CR</span>
+                 </div>
+             </div>
+
+             {/* Center: Score (Only visible when playing/end) */}
+             {(gameStatus === GameStatus.PLAYING || gameStatus === GameStatus.GAME_OVER || gameStatus === GameStatus.VICTORY) && (
+                 <div className="absolute left-1/2 -translate-x-1/2 top-4 text-center">
+                     <h1 key={score} className="text-5xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-400 drop-shadow-lg animate-pop">
+                         {score.toLocaleString()}
+                     </h1>
+                     {combo > 5 && (
+                         <div className="flex flex-col items-center mt-1">
+                             <span key={combo} className={`text-2xl font-bold italic ${combo > 20 ? 'text-blue-400' : 'text-gray-400'} animate-bounce-short`}>
+                                 {combo} COMBO
+                             </span>
+                             {multiplier > 1 && (
+                                 <span className="text-xs font-mono text-yellow-500 tracking-widest border border-yellow-500/30 px-2 rounded bg-yellow-500/10">
+                                     x{multiplier} MULTIPLIER
+                                 </span>
+                             )}
+                         </div>
+                     )}
+                 </div>
+             )}
+             
+             {/* Right: Gear */}
+             <div className="text-right">
+                <div className="bg-black/40 backdrop-blur-md p-3 rounded-lg border-r-2 border-purple-500 inline-block">
+                    <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Equipped</div>
+                    <div className="text-white font-bold text-sm flex items-center justify-end gap-2">
+                        {equippedItem.name} <Shield size={14} className="text-purple-400"/>
+                    </div>
+                </div>
+             </div>
+          </div>
+
+          {/* --- CENTER SCREENS --- */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               
-              {/* TOP BAR */}
-              <div className="flex justify-between items-start">
-                  <div className="flex flex-col gap-2 pointer-events-auto">
-                      <div className="flex items-center gap-4 bg-black/60 backdrop-blur rounded-full p-1 pr-6 border border-white/10">
-                          <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-xl font-bold shadow-[0_0_20px_rgba(37,99,235,0.5)]">
-                              {level}
-                          </div>
-                          <div className="flex flex-col w-32">
-                              <div className="flex justify-between text-[10px] font-bold text-blue-200 uppercase mb-1">
-                                  <span>XP</span>
-                                  <span>{Math.floor(progressToNextLevel)}%</span>
-                              </div>
-                              <div className="h-1.5 w-full bg-blue-900/50 rounded-full overflow-hidden">
-                                  <div className="h-full bg-blue-400 shadow-[0_0_10px_#60a5fa]" style={{ width: `${progressToNextLevel}%` }} />
-                              </div>
-                          </div>
-                      </div>
+              {/* LOADING */}
+              {gameStatus === GameStatus.LOADING && (
+                  <div className="pointer-events-auto bg-black/80 p-8 rounded-none border border-blue-500/30 backdrop-blur-md max-w-md w-full text-center relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-scan"></div>
                       
-                      <div className="flex items-center gap-2 bg-black/60 backdrop-blur rounded-full px-4 py-2 border border-yellow-500/20 self-start">
-                          <Coins className="text-yellow-400 w-4 h-4" />
-                          <span className="text-yellow-400 font-bold">{coins.toLocaleString()}</span>
-                      </div>
-                  </div>
-
-                  {gameStatus === GameStatus.IDLE && (
-                      <button onClick={handleLogout} className="bg-red-500/20 hover:bg-red-500/40 text-red-400 p-2 rounded-lg border border-red-500/30 transition-all pointer-events-auto">
-                          <LogOut size={20} />
-                      </button>
-                  )}
-                  
-                  {gameStatus === GameStatus.PLAYING && (
-                      <div className="flex flex-col items-end gap-1">
-                          <div className="text-6xl font-black italic text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] tabular-nums">
-                              {score.toLocaleString()}
-                          </div>
-                          <div className={`text-2xl font-bold flex items-center gap-2 ${multiplier > 4 ? 'text-red-500 animate-pulse' : multiplier > 1 ? 'text-blue-400' : 'text-slate-500'}`}>
-                              <TrendingUp size={24} />
-                              x{multiplier}
-                          </div>
-                      </div>
-                  )}
-              </div>
-
-              {/* CENTER AREA */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl text-center pointer-events-auto">
-                  {gameStatus === GameStatus.IDLE && !showShop && (
-                      <div className="flex flex-col items-center gap-8 animate-scan">
-                          <h1 className="text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-blue-900 tracking-tighter drop-shadow-2xl">
-                              TEMPO STRIKE
-                          </h1>
-                          
-                          <div className="flex items-center gap-6">
+                      {cameraError ? (
+                          <div className="space-y-4">
+                              <div className="text-red-500 border border-red-500/50 bg-red-950/30 p-4 rounded text-sm">
+                                  <div className="font-bold flex items-center justify-center gap-2 mb-2"><VideoOff size={16}/> SENSOR ERROR</div>
+                                  {cameraError}
+                              </div>
                               <button 
-                                 onClick={startGame}
-                                 className="group relative px-12 py-6 bg-blue-600 hover:bg-blue-500 rounded-2xl font-black text-2xl tracking-widest transition-all hover:scale-105 shadow-[0_0_40px_rgba(37,99,235,0.4)] overflow-hidden"
+                                onClick={requestCameraPermission}
+                                className="bg-white text-black px-6 py-2 font-bold hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 w-full"
                               >
-                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:animate-shine" />
-                                  <div className="flex items-center gap-4">
-                                      <Play fill="currentColor" size={28} />
-                                      ENGAGE
-                                  </div>
-                              </button>
-
-                              <button 
-                                 onClick={() => setShowShop(true)}
-                                 className="p-6 bg-slate-800/80 hover:bg-slate-700 rounded-2xl border border-slate-600 hover:border-blue-400 transition-all hover:scale-105"
-                              >
-                                  <ShoppingBag size={28} className="text-blue-400" />
+                                  <Camera size={18} /> ENABLE CAMERA
                               </button>
                           </div>
-
-                          {/* Difficulty Selector */}
-                          <div className="flex gap-2 p-1 bg-black/50 backdrop-blur rounded-lg border border-white/10 mt-4">
-                              {Object.values(Difficulty).map((d) => (
-                                  <button
-                                      key={d}
-                                      onClick={() => setDifficulty(d)}
-                                      className={`px-4 py-2 rounded text-xs font-bold transition-all ${difficulty === d 
-                                          ? 'bg-blue-600 text-white shadow-lg' 
-                                          : 'text-slate-400 hover:bg-white/5'}`}
-                                  >
-                                      {DIFFICULTY_CONFIG[d].label}
-                                  </button>
-                              ))}
-                          </div>
-                          
-                          {/* Camera warning */}
-                          {!isCameraReady && (
-                              <div className="mt-8 flex flex-col items-center gap-3">
-                                  <div className="bg-red-500/20 border border-red-500/50 text-red-200 px-6 py-3 rounded-lg flex items-center gap-3 animate-pulse">
-                                      <Camera size={20} />
-                                      {cameraError || "CAMERA OFFLINE"}
+                      ) : (
+                          // New Logic: If Model is Loaded but Camera not Ready, show Button
+                          !isCameraReady && isModelLoaded ? (
+                               <div className="space-y-4 animate-in fade-in">
+                                  <div className="text-blue-400 text-sm font-mono mb-4">
+                                      SYSTEM READY. INITIALIZE SENSORS.
                                   </div>
                                   <button 
-                                      onClick={requestCameraPermission}
-                                      className="text-xs text-blue-400 hover:text-white underline decoration-blue-500/50 hover:decoration-white"
+                                    onClick={requestCameraPermission}
+                                    className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded font-bold tracking-widest flex items-center justify-center gap-2 w-full transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]"
                                   >
-                                      INITIALIZE SENSORS MANUALLY
+                                      <Camera size={20} /> ACTIVATE CAMERA
                                   </button>
+                               </div>
+                          ) : (
+                              <div className="space-y-4">
+                                 <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                 <div className="font-mono text-blue-400 text-sm animate-pulse">
+                                     {!isCameraReady ? "CALIBRATING SENSORS..." : "LOADING ASSETS..."}
+                                 </div>
                               </div>
-                          )}
-                      </div>
-                  )}
+                          )
+                      )}
+                  </div>
+              )}
 
-                  {gameStatus === GameStatus.GAME_OVER && (
-                       <div className="flex flex-col items-center gap-6 animate-pop">
-                           <h2 className="text-6xl font-black text-red-500 tracking-widest drop-shadow-[0_0_30px_rgba(239,68,68,0.6)]">
-                               SYNC FAILED
-                           </h2>
-                           <div className="text-2xl text-slate-300 font-mono">
-                               SCORE: {score.toLocaleString()}
-                           </div>
-                           <button 
-                              onClick={retryGame}
-                              className="px-8 py-4 bg-white text-black font-black text-xl hover:bg-gray-200 rounded-lg flex items-center gap-2"
-                           >
-                               <RefreshCw size={24} />
-                               REBOOT SYSTEM
-                           </button>
-                           <button onClick={() => setGameStatus(GameStatus.IDLE)} className="text-slate-500 hover:text-white mt-4">
-                               RETURN TO LOBBY
-                           </button>
-                       </div>
-                  )}
-
-                  {gameStatus === GameStatus.VICTORY && (
-                       <div className="flex flex-col items-center gap-6 animate-pop">
-                           <h2 className="text-6xl font-black text-green-400 tracking-widest drop-shadow-[0_0_30px_rgba(74,222,128,0.6)]">
-                               COURSE CLEARED
-                           </h2>
-                           <div className="text-2xl text-slate-300 font-mono">
-                               FINAL SCORE: {score.toLocaleString()}
-                           </div>
-                           <button onClick={() => setGameStatus(GameStatus.IDLE)} className="px-8 py-4 bg-green-500 text-black font-black text-xl hover:bg-green-400 rounded-lg">
-                               CONTINUE
-                           </button>
-                       </div>
-                  )}
-              </div>
-
-              {/* SHOP MODAL */}
-              {showShop && (
-                  <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-xl p-8 flex flex-col pointer-events-auto animate-fadeIn">
-                      <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
-                          <h2 className="text-4xl font-black italic flex items-center gap-4">
-                              <ShoppingBag className="text-blue-500" size={32} />
-                              ARMORY
-                          </h2>
-                          <div className="flex items-center gap-6">
-                              <div className="flex items-center gap-2 text-yellow-400 text-xl font-bold bg-yellow-400/10 px-4 py-2 rounded-lg">
-                                  <Coins />
-                                  {coins.toLocaleString()}
-                              </div>
-                              <button onClick={() => setShowShop(false)} className="p-2 hover:bg-white/10 rounded-full">
-                                  <ArrowLeft size={32} />
-                              </button>
+              {/* MAIN MENU */}
+              {gameStatus === GameStatus.IDLE && !showShop && (
+                  <div className="pointer-events-auto flex flex-col items-center gap-8 w-full max-w-2xl animate-in fade-in zoom-in-95 duration-500">
+                      
+                      {/* Logo Area */}
+                      <div className="text-center relative">
+                          <div className="absolute -inset-10 bg-blue-500/10 blur-3xl rounded-full"></div>
+                          <h1 className="relative text-8xl font-black italic text-white tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                              TEMPO
+                          </h1>
+                          <h1 className="relative text-8xl font-black italic text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-500 tracking-tighter -mt-4 drop-shadow-[0_0_30px_rgba(59,130,246,0.5)]">
+                              STRIKE
+                          </h1>
+                          <div className="text-blue-400/50 font-mono tracking-[0.5em] text-xs mt-4">
+                              WELCOME AGENT {username}
                           </div>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 overflow-y-auto pb-20">
-                          {SABER_CATALOG.filter(item => item.id !== 'ultimate_eudin' || isAdmin).map((item) => {
-                              const owned = inventory.includes(item.id);
-                              const equipped = equippedSaberId === item.id;
-                              
+                      {/* Difficulty Selection */}
+                      <div className="flex gap-4 p-1 bg-black/40 backdrop-blur-xl border border-white/10 rounded-full">
+                          {Object.values(Difficulty).map((d) => (
+                              <button
+                                  key={d}
+                                  onClick={(e) => { e.stopPropagation(); setDifficulty(d); }} 
+                                  className={`px-8 py-2 rounded-full font-bold text-sm tracking-wider transition-all duration-300 relative overflow-hidden
+                                  ${difficulty === d 
+                                      ? (d === Difficulty.IMPOSSIBLE 
+                                          ? 'text-red-500 shadow-[0_0_25px_rgba(239,68,68,0.8)] border border-red-500/50' 
+                                          : 'text-black shadow-[0_0_20px_rgba(59,130,246,0.6)]') 
+                                      : 'text-gray-400 hover:text-white'}`}
+                              >
+                                  {difficulty === d && (
+                                      <div className={`absolute inset-0 ${d === Difficulty.IMPOSSIBLE ? 'bg-red-900/40 animate-pulse' : 'bg-white'}`}></div>
+                                  )}
+                                  <span className="relative z-10">{DIFFICULTY_CONFIG[d].label}</span>
+                              </button>
+                          ))}
+                      </div>
+                      
+                      {/* Actions */}
+                      <div className="flex flex-col gap-4 w-full max-w-sm relative z-10">
+                          {!isCameraReady ? (
+                               <div className="bg-red-900/20 border border-red-500/50 p-4 rounded text-center text-red-300 text-sm backdrop-blur-md">
+                                   <div className="flex items-center justify-center gap-2 font-bold mb-2"><VideoOff size={16} /> CAMERA OFFLINE</div>
+                                   <button 
+                                        onClick={(e) => { e.stopPropagation(); requestCameraPermission(); }} 
+                                        className="underline hover:text-white cursor-pointer"
+                                   >
+                                       {cameraError ? "Retry Permission" : "Connect Camera"}
+                                   </button>
+                               </div>
+                          ) : (
+                              <>
+                                  <button onClick={(e) => { e.stopPropagation(); startGame(); }} className="group relative w-full bg-blue-600 hover:bg-blue-500 text-white h-16 skew-x-[-10deg] transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(37,99,235,0.4)] border border-blue-400">
+                                      <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%] animate-shine"></div>
+                                      <div className="flex items-center justify-center gap-3 skew-x-[10deg] font-black tracking-widest text-xl">
+                                          <Play fill="currentColor" /> INITIATE
+                                      </div>
+                                  </button>
+                                  
+                                  <button onClick={(e) => { e.stopPropagation(); setShowShop(true); }} className="w-full bg-black/50 hover:bg-white/10 text-white h-14 skew-x-[-10deg] border border-white/20 hover:border-white/50 transition-all backdrop-blur-sm">
+                                      <div className="flex items-center justify-center gap-3 skew-x-[10deg] font-bold tracking-widest text-sm">
+                                          <ShoppingBag size={18} /> ARMORY
+                                      </div>
+                                  </button>
+                              </>
+                          )}
+                      </div>
+                  </div>
+              )}
+
+              {/* SHOP INTERFACE */}
+              {showShop && (
+                  <div className="pointer-events-auto bg-black/90 w-full max-w-6xl h-[85vh] border border-white/10 backdrop-blur-2xl flex flex-col shadow-2xl animate-in fade-in slide-in-from-bottom-5 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-8 opacity-20 pointer-events-none">
+                          <ShoppingBag size={300} />
+                      </div>
+
+                      <div className="p-8 border-b border-white/10 flex justify-between items-center bg-black/50">
+                          <div>
+                              <h2 className="text-4xl font-black italic tracking-tighter text-white">ARMORY</h2>
+                              <p className="text-gray-400 text-sm font-mono mt-1">UPGRADE YOUR ARSENAL</p>
+                          </div>
+                          <div className="flex items-center gap-6">
+                              <div className="text-right">
+                                  <div className="text-xs text-gray-500 uppercase">Credits</div>
+                                  <div className="text-2xl font-mono text-yellow-400 font-bold flex items-center gap-2 justify-end">
+                                      {coins.toLocaleString()} <Coins size={20} />
+                                  </div>
+                              </div>
+                              <button onClick={(e) => { e.stopPropagation(); setShowShop(false); }} className="bg-white/10 p-3 hover:bg-white/20 transition-colors rounded-full">
+                                  <ArrowLeft />
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 custom-scrollbar">
+                          {SABER_CATALOG.map(item => {
+                              const isOwned = inventory.includes(item.id);
+                              const isEquipped = equippedSaberId === item.id;
+                              const canAfford = coins >= item.price;
+                              const isSecret = item.id === 'ultimate_eudin';
+
                               return (
-                                  <div key={item.id} className={`relative p-4 rounded-xl border transition-all group ${
-                                      equipped ? 'bg-blue-900/20 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 
-                                      owned ? 'bg-slate-800/40 border-slate-700 hover:border-slate-500' : 
-                                      'bg-black/40 border-slate-800 opacity-80 hover:opacity-100 hover:border-slate-600'
-                                  }`}>
-                                      <div className="aspect-square bg-gradient-to-br from-slate-800 to-black rounded-lg mb-4 flex items-center justify-center relative overflow-hidden">
-                                          {/* Render a mini preview or icon */}
-                                          <div className={`w-32 h-2 rounded-full rotate-45 shadow-[0_0_15px_currentColor] ${equipped ? 'text-blue-400' : 'text-slate-400'}`} style={{ backgroundColor: 'currentColor' }} />
-                                          {item.id === 'ultimate_eudin' && <div className="absolute inset-0 bg-yellow-500/10 animate-pulse" />}
-                                      </div>
-                                      
-                                      <div className="flex justify-between items-start mb-2">
-                                          <h3 className="font-bold text-lg leading-tight">{item.name}</h3>
-                                          {equipped && <div className="bg-blue-500 text-[10px] px-2 py-0.5 rounded font-bold">EQUIPPED</div>}
-                                      </div>
-                                      
-                                      <p className="text-xs text-slate-400 mb-4 h-8 leading-tight">{item.description}</p>
-                                      
-                                      <div className="space-y-1 mb-4 text-xs font-mono">
-                                          <div className="flex justify-between">
-                                              <span className="text-slate-500">SCORE</span>
-                                              <span className={item.perks.scoreMult >= 1 ? 'text-green-400' : 'text-red-400'}>x{item.perks.scoreMult}</span>
+                                  <div key={item.id} 
+                                       onClick={(e) => { e.stopPropagation(); if (!isOwned && isSecret) handleShopItemClick(item); }}
+                                       className={`group relative p-6 border transition-all duration-300 flex flex-col
+                                       ${isEquipped ? 'border-blue-500 bg-blue-900/10' : 
+                                         isSecret && !isOwned ? 'border-purple-500/30 bg-purple-900/5 hover:border-purple-500/60' : 
+                                         'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10'}
+                                       `}
+                                  >
+                                      <div className="flex-1">
+                                          <div className="flex justify-between items-start mb-4">
+                                              <h3 className={`text-xl font-bold ${isSecret ? 'text-purple-300' : 'text-white'}`}>{item.name}</h3>
+                                              {isEquipped && <Check size={20} className="text-blue-500" />}
                                           </div>
-                                          <div className="flex justify-between">
-                                              <span className="text-slate-500">COINS</span>
-                                              <span className={item.perks.coinMult >= 1 ? 'text-green-400' : 'text-red-400'}>x{item.perks.coinMult}</span>
+                                          
+                                          <div className="grid grid-cols-3 gap-2 mb-6 text-center">
+                                              <div className="bg-black/30 p-2 rounded">
+                                                  <TrendingUp size={14} className="mx-auto text-green-400 mb-1"/>
+                                                  <div className="text-[10px] text-gray-500">SCORE</div>
+                                                  <div className="font-mono text-white text-sm">x{item.perks.scoreMult}</div>
+                                              </div>
+                                              <div className="bg-black/30 p-2 rounded">
+                                                  <Coins size={14} className="mx-auto text-yellow-400 mb-1"/>
+                                                  <div className="text-[10px] text-gray-500">COIN</div>
+                                                  <div className="font-mono text-white text-sm">x{item.perks.coinMult}</div>
+                                              </div>
+                                              <div className="bg-black/30 p-2 rounded">
+                                                  <Zap size={14} className="mx-auto text-blue-400 mb-1"/>
+                                                  <div className="text-[10px] text-gray-500">AREA</div>
+                                                  <div className="font-mono text-white text-sm">x{item.perks.hitWindow}</div>
+                                              </div>
                                           </div>
+                                          <p className="text-gray-400 text-sm leading-relaxed">{item.description}</p>
                                       </div>
 
-                                      {owned ? (
-                                          <button 
-                                              onClick={() => buyItem(item)}
-                                              disabled={equipped}
-                                              className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${
-                                                  equipped ? 'bg-slate-700 text-slate-400 cursor-default' : 'bg-white text-black hover:bg-blue-50'
-                                              }`}
-                                          >
-                                              {equipped ? <Check size={16} /> : 'EQUIP'}
-                                          </button>
-                                      ) : (
-                                          <button 
-                                              onClick={() => buyItem(item)}
-                                              disabled={coins < item.price}
-                                              className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 ${
-                                                  coins >= item.price ? 'bg-yellow-500 hover:bg-yellow-400 text-black' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                                              }`}
-                                          >
-                                              {coins >= item.price ? (
-                                                  <>BUY <span className="text-xs bg-black/20 px-1.5 rounded">{item.price}</span></>
-                                              ) : (
-                                                  <>LOCKED <Lock size={14} /></>
-                                              )}
-                                          </button>
-                                      )}
+                                      <div className="mt-6">
+                                          {isOwned ? (
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); handleShopItemClick(item); }}
+                                                  disabled={isEquipped}
+                                                  className={`w-full py-3 font-bold text-sm tracking-widest uppercase transition-all
+                                                  ${isEquipped ? 'bg-green-500/20 text-green-500 cursor-default border border-green-500/50' : 'bg-white text-black hover:bg-gray-200'}`}
+                                              >
+                                                  {isEquipped ? 'EQUIPPED' : 'EQUIP'}
+                                              </button>
+                                          ) : (
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); handleShopItemClick(item); }}
+                                                  className={`w-full py-3 font-bold text-sm tracking-widest uppercase transition-all flex items-center justify-center gap-2
+                                                  ${canAfford ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                                              >
+                                                  {canAfford ? (
+                                                      <>PURCHASE <span className="text-xs bg-black/20 px-1 rounded ml-1">{item.price}</span></>
+                                                  ) : (
+                                                      <><Lock size={14} /> {item.price}</>
+                                                  )}
+                                              </button>
+                                          )}
+                                      </div>
                                   </div>
                               );
                           })}
@@ -819,23 +978,42 @@ const App: React.FC = () => {
                   </div>
               )}
 
-              {/* BOTTOM HUD (Health) */}
-              {gameStatus === GameStatus.PLAYING && (
-                  <div className={`fixed bottom-0 left-0 w-full h-2 pointer-events-none transition-colors duration-300 ${damageAnim ? 'bg-red-500' : 'bg-blue-900/30'}`}>
-                      <div 
-                        className={`h-full shadow-[0_0_20px_currentColor] transition-all duration-300 ${health < 30 ? 'bg-red-500 animate-pulse' : 'bg-cyan-400'}`} 
-                        style={{ width: `${health}%` }} 
-                      />
-                  </div>
-              )}
-
-              {/* Level Up Overlay */}
-              {showLevelUp && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-                      <div className="bg-black/80 backdrop-blur border border-yellow-500 p-8 rounded-2xl text-center animate-level-up">
-                          <div className="text-yellow-400 font-bold text-xl mb-2">LEVEL UP!</div>
-                          <div className="text-6xl font-black text-white">{level}</div>
+              {/* END SCREEN */}
+              {(gameStatus === GameStatus.GAME_OVER || gameStatus === GameStatus.VICTORY) && (
+                  <div className="pointer-events-auto text-center space-y-6 animate-in zoom-in-90 duration-300">
+                      <div>
+                          <h2 className={`text-8xl font-black italic tracking-tighter ${gameStatus === GameStatus.VICTORY ? 'text-green-400 drop-shadow-[0_0_30px_rgba(74,222,128,0.5)]' : 'text-red-500 drop-shadow-[0_0_30px_rgba(239,68,68,0.5)]'}`}>
+                              {gameStatus === GameStatus.VICTORY ? "CLEARED" : "FAILED"}
+                          </h2>
+                          <div className="h-2 w-full bg-gradient-to-r from-transparent via-white to-transparent opacity-50 mt-2"></div>
+                      </div>
+                      
+                      <div className="bg-black/60 backdrop-blur-xl p-8 border border-white/10 min-w-[400px]">
+                          <div className="text-gray-400 text-xs font-mono uppercase tracking-widest mb-1">Final Score</div>
+                          <div className="text-6xl font-black text-white mb-6">{score.toLocaleString()}</div>
+                          
+                          {gameStatus === GameStatus.VICTORY && (
+                              <div className="inline-block bg-yellow-500/20 border border-yellow-500/50 px-4 py-1 rounded text-yellow-400 text-sm font-bold mb-6">
+                                  +500 XP BONUS
+                              </div>
+                          )}
+                          
+                          <div className="flex gap-4 justify-center">
+                              <button onClick={(e) => { e.stopPropagation(); setGameStatus(GameStatus.IDLE); startGame(); }} className="bg-white text-black px-6 py-3 font-bold hover:bg-gray-200 transition-colors">
+                                  RETRY
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setGameStatus(GameStatus.IDLE); }} className="bg-transparent border border-white/30 text-white px-6 py-3 font-bold hover:bg-white/10 transition-colors">
+                                  MENU
+                              </button>
+                          </div>
                       </div>
                   </div>
               )}
-          
+          </div>
+      </div>
+      )}
+    </div>
+  );
+};
+
+export default App;
